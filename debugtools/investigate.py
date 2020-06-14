@@ -116,27 +116,34 @@ def logonreturn(*variables):
     return wrapper
 
 
-def vprint(*args, **kwargs):
+def vprint(*args, apply=print, **kwargs):
     """
-    Verbose print: prints the variable name, its type and value.
-    Examples::
-     >>> vprint(5 + 5, sum([1,2])) # 5 + 5 (<class 'int'>): 10
-     >>> vprint(sum([1,2])) # sum([1,2]) (<class 'int'>): 3
+    Prints the variable name, its type and value.
+    ::
+        vprint(5 + 5, sum([1,2]))
+        > 5 + 5 (<class 'int'>):
+          10
+
+          sum([1,2]) (<class 'int'>):
+          3
+
     """
-    import inspect
     
     def printarg(_name, _val):
-        print(f'{_name} ({type(_val)}):', _val, end='\n')
+        apply(f'{_name} ({type(_val)}):', _val)
     
     if args:
         currframe = inspect.currentframe()
         outer = inspect.getouterframes(currframe)
         frameinfo = outer[1]
         ctx = frameinfo.code_context[0].strip()
-        argnames = ctx[ctx.find('(') + 1:-1].split(',')
+        argnames = ctx[ctx.find('(') + 1:-1].split(', ')
         if len(argnames) != len(args) + len(kwargs):
-            print(f"Too complex a statement, try breaking it down to variables")
-            return
+            print(f"Too complex statement, try breaking it down to variables or eliminating whitespace",
+                  # f'len(argnames): {len(argnames)}', f'len(args): {len(args)}', f'len(kwargs): {len(kwargs)}',
+                  # vprint(ctx, argnames, args, kwargs)
+                  )
+            # return
         for i, val in enumerate(args):
             try:
                 name = argnames[i].strip()
