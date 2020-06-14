@@ -9,7 +9,9 @@ from more_termcolor import colors
 import os
 
 OBJECT_RE = re.compile(r'<(?:[\w\d]+\.)*([\w\d]+) object at (0x[\w\d]{12})>')
-TYPE_RE = re.compile(r'(?:<\w+ )([^>]+)')
+
+# "<class 'int'>" → "int"
+TYPE_RE = re.compile(r'<\w+ [\'"]([^\"\']+)')
 
 
 def _pretty_obj(match) -> str:
@@ -17,18 +19,53 @@ def _pretty_obj(match) -> str:
     return f'{groups[0]} ({groups[1]})'
 
 
-def pformat(obj) -> str:
+def pformat(obj, *, types=False) -> str:
+    def _type_pformat(_obj: type) -> str:
+        _s = str(_obj)
+        _match = TYPE_RE.search(_s)
+        _groups = _match.groups()
+        return _groups[0]
+    
+    def _generic_pformat(_obj, _types: bool) -> str:
+        if not _types:
+            _string = f'{_obj}'
+        else:
+            _type_repr = f"({_type_pformat(type(_obj))})"
+            _string = f'{_obj} {colors.dark(_type_repr)}'
+        return _string
+    
     if isinstance(obj, dict):
         return prettyformat(obj)
-    if isinstance(obj, str) and ' ' not in obj and not obj.endswith(':'):
+    isstr = isinstance(obj, str)
+    if isstr and ' ' not in obj and not obj.endswith(':'):
         string = repr(obj)
     elif isinstance(obj, type):
-        string = re.search(TYPE_RE, str(obj)).groups()[0]
+        string = _type_pformat(obj)
+    elif not isstr and hasattr(obj, '__iter__'):
+        # reaching here means it's not str nor dict
+        objlen = 0
+        
+        for item in obj:  # use generic pformat if collection is too long or any of its items is a collection
+            if objlen > 6:
+                string = _generic_pformat(obj, types)
+                break
+            if hasattr(item, '__iter__') and not isinstance(item, str):
+                string = _generic_pformat(obj, types)
+                break
+            objlen += 1
+        else:
+            formatted_items = []
+            for item in obj:
+                formatted_item = pformat(item, types=types)
+                formatted_items.append(formatted_item)
+            
+            formatted_obj = type(obj)(formatted_items)
+            string = str(formatted_obj)
     
     else:
-        string = str(obj)
+        string = _generic_pformat(obj, types)
     string = re.sub(OBJECT_RE, _pretty_obj, string)
-    return string
+    return string.encode('utf-8').decode('unicode_escape')
 
 
 def fmt_arg(arg) -> str:
