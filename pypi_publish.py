@@ -70,7 +70,10 @@ def run(cmd) -> Optional[List[str]]:
         return None
     else:
         print('success')
-        return comp_proc.stdout.decode().splitlines()
+        try:
+            return comp_proc.stdout.decode().splitlines()
+        except AttributeError as e:
+            return []
 
 
 def bump_version(data, version, bumped):
