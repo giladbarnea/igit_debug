@@ -13,7 +13,7 @@ setup(name='debugtools',
       license='MIT',
       packages=find_packages(exclude=["tests?", "*.tests*", "*.tests*.*", "tests*.*", ]),
       install_requires=['more_termcolor>=1.0.9', 'logbook'],
-      extras_require=['pytest', 'ipdb', 'IPython'],
+      extras_require=['pytest', 'ipdb', 'IPython', 'semver'],
       classifiers=[
           # https://pypi.org/classifiers/
           'Development Status :: 1 - Planning',
