@@ -4,16 +4,19 @@ import sys
 # pip3 install -e .
 # or
 # [sudo] python3.8 setup.py develop
-
-setup(name='debugtools',
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+setup(name='igit_debug',
       version='0.0.1',
       description='Inspection decorators, exception handler, formatting tools, a pretty logger, ...',
+      long_description=long_description,
+      long_description_content_type="text/markdown",
       author='Gilad Barnea',
       author_email='giladbrn@gmail.com',
       license='MIT',
       packages=find_packages(exclude=["tests?", "*.tests*", "*.tests*.*", "tests*.*", ]),
       install_requires=['more_termcolor>=1.0.9', 'logbook'],
-      extras_require=['pytest', 'ipdb', 'IPython', 'semver'],
+      extras_require={'dev': ['pytest', 'ipdb', 'IPython', 'semver']},
       classifiers=[
           # https://pypi.org/classifiers/
           'Development Status :: 1 - Planning',
