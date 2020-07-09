@@ -89,7 +89,7 @@ class ExcHandler:
                     continue
                 
                 if f_idx < tb_steps_taken:
-                    print(colors.brightred(f'REALLY WIERD, f_idx ({f_idx}) < tb_steps_taken ({tb_steps_taken})'))
+                    print(colors.brightyellow(f'REALLY WIERD, f_idx ({f_idx}) < tb_steps_taken ({tb_steps_taken})'))
                     continue
                 
                 if f_idx > tb_steps_taken:
@@ -163,7 +163,7 @@ class ExcHandler:
             else:
                 linebreak = '\n'
                 quote = ''
-            formatted += f'\t{name}: {quote}{val}{quote} {colors.brightblack(typ)}{linebreak}'
+            formatted += f'\t{name}: {quote}{val}{quote} {colors.dark(typ)}{linebreak}'
         return formatted
     
     @property
@@ -179,26 +179,42 @@ class ExcHandler:
     def excType(self):
         return self.exc.__class__.__qualname__
     
-    def short(self):
-        """Returns 1 line"""
+    def shorter(self, *extra):
+        """Returns 1 very short line: just pretty exception type and formatted exception args if exist"""
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
         if self.excArgs:
-            return f"{self.excType}: {self.excArgs}"
+            string = f"{self.excType}: {self.excArgs}"
         else:
-            return self.excType
+            string = self.excType
+        if extra:
+            string += f' | ' + ', '.join(map(str,extra))
+        return string
     
-    def summary(self):
+    def short(self, *extra):
+        """Returns 1 line: exc args and some context info"""
+        if not self.exc:
+            return ExcHandler._handle_bad_call_context()
+        string = f'{self.excType}: {self.excArgs} | File "{self.last.filename}", line {self.last.lineno} in {colors.brightwhite(self.last.name)}()'
+        if extra:
+            string += f' | ' + ', '.join(map(str, extra))
+        return string
+    
+    def summary(self, *extra):
         """Returns 5 lines"""
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
-        return '\n'.join([f'{self.excType}, File "{self.last.filename}", line {self.last.lineno} in {self.last.name}()',
-                          f'Exception args:',
-                          f'\t{self.excArgs}',
-                          f'Responsible code:',
-                          f'\t{self.last.line}'])
+        string = '\n'.join([f'{self.excType}, File "{self.last.filename}", line {self.last.lineno} in {colors.brightwhite(self.last.name)}()',
+                            f'Exception args:',
+                            f'\t{self.excArgs}',
+                            f'Responsible code:',
+                            f'\t{self.last.line}',
+                            *map(str, extra)
+                            ])
+        
+        return string
     
-    def full(self, limit: int = None):
+    def full(self, *extra, limit: int = None):
         """Prints the summary, whole stack and local variables at the scope of exception.
         Limit is 0-based, from recent to deepest (limit=0 means only first frame)"""
         import os
@@ -211,7 +227,7 @@ class ExcHandler:
             termwidth = 80
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
-        description = self.summary()
+        description = self.summary(*extra)
         honor_limit = limit is not None
         for i, fs in self.frame_summaries:
             if honor_limit and i > limit:

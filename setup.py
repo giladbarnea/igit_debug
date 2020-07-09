@@ -7,7 +7,7 @@ import sys
 with open("README.md", "r") as fh:
     long_description = fh.read()
 setup(name='igit_debug',
-      version='0.0.2',
+      version='0.0.3',
       description='Inspection decorators, exception handler, formatting tools, a pretty logger, ...',
       long_description=long_description,
       long_description_content_type="text/markdown",

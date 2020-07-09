@@ -3,7 +3,9 @@ from typing import Callable
 
 import functools
 from more_termcolor import colors
-from . import ExcHandler, loggr
+
+import igit_debug.formatting
+from . import ExcHandler
 
 
 # * debug utils
@@ -28,9 +30,9 @@ class PrettySig(dict):
         self.update(**fn_kwargs, **arg_defaults)
         # format positional args with their respective passed values
         if types:
-            _pretty_val = lambda _v: f'{loggr.pformat(_v)} {colors.dark(loggr.pformat(type(_v)))}'
+            _pretty_val = lambda _v: f'{igit_debug.formatting.pformat(_v)} {colors.dark(igit_debug.formatting.pformat(type(_v)))}'
         else:
-            _pretty_val = lambda _v: loggr.pformat(_v)
+            _pretty_val = lambda _v: igit_debug.formatting.pformat(_v)
         args_str = ''
         for k, v in zip(arg_names, fn_arg_values):
             self[k] = v
@@ -38,7 +40,7 @@ class PrettySig(dict):
         
         if len(arg_names) < len(fn_arg_values):
             # what's this?
-            args_str += ', ' + ', '.join(map(loggr.pformat, fn_arg_values[-len(arg_names):]))
+            args_str += ', ' + ', '.join(map(igit_debug.formatting.pformat, fn_arg_values[-len(arg_names):]))
         
         # we're left with:
         # (1) positional args (with default values), that were omitted by the caller
@@ -52,15 +54,15 @@ class PrettySig(dict):
         for a in remaining_arg_names:
             # TODO: types
             if a in fn_kwargs_copy:
-                args_str += f', {a}={loggr.pformat(fn_kwargs_copy[a])}'
+                args_str += f', {a}={igit_debug.formatting.pformat(fn_kwargs_copy[a])}'
                 del fn_kwargs_copy[a]
             elif a in arg_defaults:
-                args_str += f', {a}={loggr.pformat(arg_defaults[a])}'
+                args_str += f', {a}={igit_debug.formatting.pformat(arg_defaults[a])}'
         
         # handle (3)
         if fn_kwargs_copy:
             for k, v in fn_kwargs_copy.items():
-                args_str += f', {k}={loggr.pformat(v)}'
+                args_str += f', {k}={igit_debug.formatting.pformat(v)}'
         self.pretty_repr = args_str
     
     def __getattribute__(self, item):
@@ -76,11 +78,11 @@ class PrettySig(dict):
 
 
 def _pretty_retval(retval, *, types=False):
-    pretty = loggr.pformat(retval)
+    pretty = igit_debug.formatting.pformat(retval)
     if len(pretty) > 300:  # don't clutter
         pretty = f'{pretty[:300]}...'
     elif types:
-        pretty += colors.dark(f' {loggr.pformat(type(retval))}')
+        pretty += colors.dark(f' {igit_debug.formatting.pformat(type(retval))}')
     return pretty
 
 
@@ -90,13 +92,14 @@ def logreturn(fn):
     @functools.wraps(fn)
     def decorator(*fn_args, **fn_kwargs):
         retval = fn(*fn_args, **fn_kwargs)
-        pretty = _pretty_retval(retval)
-        print(colors.bold(f'{identifier}() returning → {pretty}'))
+        pretty = _pretty_retval(retval, types=True)
+        print(f'{identifier}() returning → {pretty}')
         return retval
     
     return decorator
 
 
+# TODO: make all of these Loggr methods
 def loginout(_fn=None, *, types=False):
     def wrapper(fn):
         identifier = fn.__qualname__
@@ -109,7 +112,7 @@ def loginout(_fn=None, *, types=False):
                 sig_repr = '<no args>'
             retval = fn(*fn_args, **fn_kwargs)
             pretty = _pretty_retval(retval, types=types)
-            print(colors.bold(f'{identifier}({sig_repr}) → {pretty}'))
+            print(f'{identifier}({sig_repr}) → {pretty}')
             return retval
         
         return decorator
@@ -120,19 +123,24 @@ def loginout(_fn=None, *, types=False):
 
 
 def logonreturn(*variables, types=False):
+    """@logonreturn('self.answer', types=True)"""
+    
     def wrapper(fn):
         identifier = fn.__qualname__
         
         @functools.wraps(fn)
         def decorator(*fn_args, **fn_kwargs):
             retval = fn(*fn_args, **fn_kwargs)
+            # if not variables:
+            #     print(colors.brightyellow(f'logonreturn({identifier}) no variables. returning retval as-is'))
+            #     return retval
             prettysig = PrettySig(fn, fn_args, fn_kwargs, types=types)
             obj = prettysig
             for var in variables:
                 attrs = var.split('.')
                 for attr in attrs:
                     obj = obj.__getattribute__(attr)
-            print(colors.bold(f'{var}: {loggr.pformat(obj, types=types)}'))
+            print(f'{var}: {igit_debug.formatting.pformat(obj, types=types)}')
             return retval
         
         return decorator
@@ -183,7 +191,7 @@ def investigate(*,
                 ret_val=True,
                 print_exc=True,
                 locals_on_return=False,
-                formatter: Callable = loggr.pformat,
+                formatter: Callable = igit_debug.formatting.pformat,
                 raise_on_exc=True,
                 types=False):
     """
@@ -209,9 +217,9 @@ def investigate(*,
                 sig_repr = repr(prettysig)
                 if not sig_repr:
                     sig_repr = 'no args'
-                print(colors.bold(f'entered {identifier}({sig_repr})'))
+                print(f'entered {identifier}({sig_repr})')
             else:
-                print(colors.bold(f'entered {identifier}()'))
+                print(f'entered {identifier}()')
             try:
                 retval = fn(*fn_args, **fn_kwargs)
                 if ret_val:
@@ -226,10 +234,10 @@ def investigate(*,
                         # tb_stack = ExcHandler._remove_nonlib_frames(tb_stack)
                         pass
                     pretty = _pretty_retval(retval, types=types)
-                    print(colors.bold(f'{identifier}() returning → {pretty}'))
+                    print(f'{identifier}() returning → {pretty}')
                 
                 else:
-                    print(colors.bold(f'exiting {identifier}()'))
+                    print(f'exiting {identifier}()')
                 
                 return retval
             except Exception as e:

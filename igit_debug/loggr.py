@@ -1,75 +1,30 @@
-import re
 import sys
-from pprint import pformat as prettyformat
-from typing import Callable, Any
+from typing import Callable, Any, Tuple
 
 import logbook
-from logbook import Logger, NOTSET
+from logbook import Logger, get_level_name
 from more_termcolor import colors
 import os
+from contextlib import suppress
+import functools
 
-OBJECT_RE = re.compile(r'<(?:[\w\d]+\.)*([\w\d]+) object at (0x[\w\d]{12})>')
-
-# "<class 'int'>" → "int"
-TYPE_RE = re.compile(r'<\w+ [\'"]([^\"\']+)')
-
-
-def _pretty_obj(match) -> str:
-    groups = match.groups()
-    return f'{groups[0]} ({groups[1]})'
+from .formatting import pformat
+from .investigate import PrettySig
+from .util import parse_level
+import inspect
 
 
-def pformat(obj, *, types=False) -> str:
-    def _type_pformat(_obj: type) -> str:
-        _s = str(_obj)
-        _match = TYPE_RE.search(_s)
-        _groups = _match.groups()
-        return _groups[0]
+# LOG_LEVEL = os.getenv('IGIT_LOG_LEVEL', NOTSET)
+
+
+def fmt_arg(arg, *, types=False) -> str:
+    """Underlines args ending with ':'.
+    Applies `pformat` on `arg`."""
+    with suppress(AttributeError):
+        if arg.endswith(':'):
+            types = False
     
-    def _generic_pformat(_obj, _types: bool) -> str:
-        if not _types:
-            _string = f'{_obj}'
-        else:
-            _type_repr = f"({_type_pformat(type(_obj))})"
-            _string = f'{_obj} {colors.dark(_type_repr)}'
-        return _string
-    
-    if isinstance(obj, dict):
-        return prettyformat(obj)
-    isstr = isinstance(obj, str)
-    if isstr and ' ' not in obj and not obj.endswith(':'):
-        string = repr(obj)
-    elif isinstance(obj, type):
-        string = _type_pformat(obj)
-    elif not isstr and hasattr(obj, '__iter__'):
-        # reaching here means it's not str nor dict
-        objlen = 0
-        
-        for item in obj:  # use generic pformat if collection is too long or any of its items is a collection
-            if objlen > 6:
-                string = _generic_pformat(obj, types)
-                break
-            if hasattr(item, '__iter__') and not isinstance(item, str):
-                string = _generic_pformat(obj, types)
-                break
-            objlen += 1
-        else:
-            formatted_items = []
-            for item in obj:
-                formatted_item = pformat(item, types=types)
-                formatted_items.append(formatted_item)
-            
-            formatted_obj = type(obj)(formatted_items)
-            string = str(formatted_obj)
-    
-    else:
-        string = _generic_pformat(obj, types)
-    string = re.sub(OBJECT_RE, _pretty_obj, string)
-    return string.encode('utf-8').decode('unicode_escape')
-
-
-def fmt_arg(arg) -> str:
-    string = pformat(arg)
+    string = pformat(arg, types=types)
     
     if string.endswith(':'):
         return colors.ul(string[:-1]) + ': '
@@ -77,15 +32,26 @@ def fmt_arg(arg) -> str:
         return string + ', '
 
 
-def fmt_args(args) -> str:
-    formatted_args = [fmt_arg(a) for a in args]
-    sumlen = sum(map(len, formatted_args))
+def fmt_args(args: Tuple, *, types=False) -> str:
+    """Splits `args` to separate lines if the resulting string is longer than 80.
+    Applies `fmt_arg` to each `arg`."""
+    formatted_args = [fmt_arg(a, types=types) for a in args]
     if len(args) > 1:
+        sumlen = 0
+        for i, arg in enumerate(args):
+            try:
+                sumlen += len(arg)
+            except TypeError:
+                # None has no len etc
+                # TODO: FormattedArg class with 'nocolor' prop and 'colored' prop
+                #  because formatted has extra ansi strings
+                sumlen += len(str(arg))
+        # sumlen = sum(map(len, args))
         if sumlen <= 80:
             joined = ''.join(formatted_args).strip()
         
         else:
-            joined = '\n\t' + '\n\t'.join(formatted_args).strip()
+            joined = '\n' + '\n'.join(formatted_args).strip()
     else:
         joined = ''.join(formatted_args).strip()
     
@@ -107,7 +73,7 @@ def log_preprocess(fn: Callable[['Loggr', str, Any], None]):
         
         if selfarg.only_verbose and not verbose:
             return
-        msg = fmt_args(args)
+        msg = fmt_args(args, types=kwargs.get('types', False))
         if (frame_correction := kwargs.get('frame_correction')) is None:
             kwargs['frame_correction'] = 2
         else:
@@ -119,21 +85,26 @@ def log_preprocess(fn: Callable[['Loggr', str, Any], None]):
 
 class Loggr(Logger):
     
-    def __init__(self, name=None, level=NOTSET, *, only_verbose=False):
+    def __init__(self, name=None, level=os.getenv('IGIT_LOG_LEVEL', 'NOTSET'), *, only_verbose=False):
+        """'info' is higher than debug"""
+        level = parse_level(level)
         super().__init__(name, level)
+        print(f'IGIT_LOG_LEVEL: {get_level_name(level)}')
         self.only_verbose = only_verbose
     
     @log_preprocess
     def debug(self, msg, **kwargs):
-        super().info(colors.brightwhite(msg), **kwargs)
+        super().debug(colors.dark(msg), **kwargs)
     
     @log_preprocess
     def info(self, msg, **kwargs):
-        super().info(colors.green(msg), **kwargs)
+        super().info(colors.white(msg), **kwargs)
     
     @log_preprocess
     def warn(self, msg, **kwargs):
         super().warn(colors.yellow(msg), **kwargs)
+    
+    warning = warn
     
     @log_preprocess
     def boldwarn(self, msg, **kwargs):
@@ -148,7 +119,46 @@ class Loggr(Logger):
     
     @log_preprocess
     def title(self, msg, **kwargs):
-        super().info(colors.green(msg, 'bold'), **kwargs)
+        super().info(colors.white(msg, 'bold'), **kwargs)
+    
+    def bylevel(self, msg, *, level, **kwargs):
+        try:
+            fn = getattr(self, level.lower())
+        except AttributeError as e:
+            fn = self.debug
+        return fn(msg, **kwargs)
+    
+    # ** decorators
+    def logonreturn(self, *variables, types=False, level='DEBUG'):
+        """@logonreturn('self.answer', types=True)
+        Currently only works for args passed in signatures"""
+        
+        def wrapper(fn):
+            identifier = fn.__qualname__
+            
+            @functools.wraps(fn)
+            def decorator(*fn_args, **fn_kwargs):
+                retval = fn(*fn_args, **fn_kwargs)
+                # if not variables:
+                #     print(colors.brightyellow(f'logonreturn({identifier}) no variables. returning retval as-is'))
+                #     return retval
+                # TODO:
+                #  if var is not found, try get fn locals
+                #  file = inspect.getsourcefile(fn)
+                #  f = next frame in sys._getframe(n) if file in str(frame)
+                #  
+                prettysig = PrettySig(fn, fn_args, fn_kwargs, types=types)
+                obj = prettysig
+                for var in variables:
+                    attrs = var.split('.')
+                    for attr in attrs:
+                        obj = obj.__getattribute__(attr)
+                self.bylevel(f'{var}: {pformat(obj, types=types)}', level=level)
+                return retval
+            
+            return decorator
+        
+        return wrapper
 
 
 logbook.StreamHandler(sys.stdout, format_string='{record.time:%T.%f} | {record.module}.{record.func_name}() | {record.message}').push_application()
