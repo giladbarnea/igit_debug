@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable
+from typing import Callable, List
 
 import functools
 from more_termcolor import colors
@@ -148,6 +148,49 @@ def logonreturn(*variables, types=False):
     return wrapper
 
 
+def getvarnames(*vars) -> dict:
+    varnames = dict()
+    currframe = inspect.currentframe()
+    outer = inspect.getouterframes(currframe)
+    frameinfo = outer[2]  # self check: ctx has 'varnames=True'
+    
+    ctx = frameinfo.code_context[0].strip()
+    open_parens = 0
+    last_close_i = None
+    for i, c in enumerate(reversed(ctx), 1):
+        if c == ')':
+            last_close_i = i
+            open_parens -= 1
+        elif c == '(':
+            open_parens += 1
+            if open_parens == 0:
+                fn_args_str = ctx[-i + 1:-last_close_i].replace(' ', '')
+                argnames = fn_args_str.split(',')
+                for arg in argnames[:]:
+                    if arg.startswith('types=') or arg.startswith('varnames='):
+                        argnames.remove(arg)
+                break
+    else:
+        # no argnames!
+        breakpoint()
+    
+    # argnames = ctx[ctx.find('(') + 1:-1].split(', ')
+    if len(argnames) != len(vars):
+        print(f"Too complex statement, try breaking it down to variables or eliminating whitespace",
+              # f'len(argnames): {len(argnames)}', f'len(args): {len(args)}', f'len(kwargs): {len(kwargs)}',
+              # vprint(ctx, argnames, args, kwargs)
+              )
+        # return
+    
+    for i, val in enumerate(vars):
+        try:
+            name = argnames[i].strip()
+        except IndexError:
+            continue  # TODO: break?
+        varnames[name] = val
+    return varnames
+
+
 def vprint(*args, apply=print, **kwargs):
     """
     Prints the variable name, its type and value.
@@ -161,9 +204,12 @@ def vprint(*args, apply=print, **kwargs):
 
     """
     
-    def printarg(_name, _val):
-        apply(f'{_name} ({type(_val)}):', _val)
+    def printarg(_name, _val) -> str:
+        _string = f'{_name}: {igit_debug.formatting.pformat(_val, types=True)}'
+        apply(_string)
+        return _string
     
+    strings = []
     if args:
         currframe = inspect.currentframe()
         outer = inspect.getouterframes(currframe)
@@ -176,14 +222,16 @@ def vprint(*args, apply=print, **kwargs):
                   # vprint(ctx, argnames, args, kwargs)
                   )
             # return
+        
         for i, val in enumerate(args):
             try:
                 name = argnames[i].strip()
             except IndexError:
-                continue
-            printarg(name, val)
+                continue  # TODO: break?
+            strings.append(printarg(name, val))
     for name, val in kwargs.items():
-        printarg(name, val)
+        strings.append(printarg(name, val))
+    # return strings
 
 
 def investigate(*,

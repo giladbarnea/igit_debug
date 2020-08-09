@@ -9,7 +9,7 @@ from contextlib import suppress
 import functools
 
 from .formatting import pformat
-from .investigate import PrettySig
+from .investigate import PrettySig, getvarnames
 from .util import parse_level
 import inspect
 
@@ -32,7 +32,7 @@ def fmt_arg(arg, *, types=False) -> str:
         return string + ', '
 
 
-def fmt_args(args: Tuple, *, types=False) -> str:
+def fmt_args(args: Tuple, *, types=False, varnames=False) -> str:
     """Splits `args` to separate lines if the resulting string is longer than 80.
     Applies `fmt_arg` to each `arg`."""
     formatted_args = [fmt_arg(a, types=types) for a in args]
@@ -65,6 +65,12 @@ def log_preprocess(fn: Callable[['Loggr', str, Any], None]):
     # is equivalent to this:
     # logger.title(f'TrichDay.post(prop={repr(prop)}, val={repr(val)}, date={repr(date)})')
     def logwrap(selfarg: 'Loggr', *args, **kwargs):
+        """From kwargs:
+        only_verbose, types, varnames, frame_correction.
+         
+         From env:
+         IGIT_VERBOSE
+        """
         verbose = os.getenv('IGIT_VERBOSE', False)
         if kwargs.get('only_verbose'):
             if not verbose:
@@ -73,7 +79,15 @@ def log_preprocess(fn: Callable[['Loggr', str, Any], None]):
         
         if selfarg.only_verbose and not verbose:
             return
-        msg = fmt_args(args, types=kwargs.get('types', False))
+        types = kwargs.get('types', False)
+        varnames = kwargs.get('varnames', False)
+        if varnames:
+            vnames: dict = getvarnames(*args)
+            args = []
+            for name, value in vnames.items():
+                args.append(f'{name}:')
+                args.append(value)
+        msg = fmt_args(args, types=types, varnames=varnames)
         if (frame_correction := kwargs.get('frame_correction')) is None:
             kwargs['frame_correction'] = 2
         else:
@@ -86,19 +100,28 @@ def log_preprocess(fn: Callable[['Loggr', str, Any], None]):
 class Loggr(Logger):
     
     def __init__(self, name=None, level=os.getenv('IGIT_LOG_LEVEL', 'NOTSET'), *, only_verbose=False):
-        """'info' is higher than debug"""
+        """'info' is higher than debug.
+        frame_correction=2, only_verbose=False, types=False, varnames=False
+        """
         level = parse_level(level)
         super().__init__(name, level)
-        print(f'IGIT_LOG_LEVEL: {get_level_name(level)}')
         self.only_verbose = only_verbose
     
     @log_preprocess
     def debug(self, msg, **kwargs):
-        super().debug(colors.dark(msg), **kwargs)
+        if '\x1b[' in msg:
+            # TODO: remove when more_termcolor test__multiple_scopes test__real_world__loggr passes
+            super().debug(msg, **kwargs)
+        else:
+            super().debug(colors.dark(msg), **kwargs)
     
     @log_preprocess
     def info(self, msg, **kwargs):
         super().info(colors.white(msg), **kwargs)
+
+    @log_preprocess
+    def good(self, msg, **kwargs):
+        super().info(colors.green(msg), **kwargs)
     
     @log_preprocess
     def warn(self, msg, **kwargs):

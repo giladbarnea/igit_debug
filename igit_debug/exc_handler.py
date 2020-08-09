@@ -188,11 +188,14 @@ class ExcHandler:
         else:
             string = self.excType
         if extra:
-            string += f' | ' + ', '.join(map(str,extra))
+            string += f' | ' + ', '.join(map(str, extra))
         return string
     
     def short(self, *extra):
-        """Returns 1 line: exc args and some context info"""
+        """
+        Returns 1 line: exc args and some context info.
+        :param extra: will be (formatted and) appended to resulting string 
+        """
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
         string = f'{self.excType}: {self.excArgs} | File "{self.last.filename}", line {self.last.lineno} in {colors.brightwhite(self.last.name)}()'
