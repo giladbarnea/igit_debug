@@ -5,11 +5,10 @@ from more_termcolor import colors
 
 from igit_debug.util import safeiter
 
+# "<class 'int'>" → "int"
 OBJECT_RE = re.compile(r'<(?:[\w\d]+\.)*([\w\d]+) object at (0x[\w\d]{12})>')
 TYPE_RE = re.compile(r'<\w+ [\'"]([^\"\']+)')
 
-
-# "<class 'int'>" → "int"
 
 def _pretty_obj(match) -> str:
     groups = match.groups()
@@ -23,9 +22,9 @@ def pformat(obj, *,
             ) -> str:
     """
     :param obj: The object to pretty-print. Can be (almost) anything.
-    :param bool types: Specifiy True to the object's type alongside its value.
+    :param bool types: Specify True to append the object's type alongside its value.
     :param int depth: For recursive collections, how deep should the function apply itself to sub items.
-    :param Callable stringifier: function to convert a primitive to string
+    :param Callable stringifier: function to convert a primitive to string; `repr` by default
     :param bool colorize: whether to use colors in the output string.
     """
     

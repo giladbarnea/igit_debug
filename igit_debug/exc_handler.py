@@ -23,7 +23,7 @@ class ExcHandler:
         self.exc = None  # declare first thing in case anything fails
         self._formatter = formatter
         try:
-            
+
             if exc:
                 tb = sys.exc_info()[2]  # only tb because caller passed exc
                 self.exc = exc
@@ -32,18 +32,18 @@ class ExcHandler:
                 self.exc = exc
             self.excArgs = ""
             self.frame_summaries: FrameSummaries = []
-            
+
             if not tb and not exc:
                 return
-            
+
             tb_frame_summaries = ExcHandler._extract_tb(tb, capture_locals)
             stack: traceback.StackSummary = traceback.extract_stack()[:-1]  # leave out current frame
             self.frame_summaries = ExcHandler._combine_traceback_and_stack(stack, tb_frame_summaries)
             self.excArgs = ExcHandler.fmt_args(self.exc.args)
-        
+
         except Exception as init_exc:
             self._handle_self_failure(init_exc)
-    
+
     @staticmethod
     def _handle_bad_call_context():
         warning = '\n'.join(["ExcHandler couldn't find any Exception along the trace",
@@ -51,7 +51,7 @@ class ExcHandler:
                              "(could also happen when calling logger.error(summarize_exc=True) outside exc handling block"])
         print(warning)
         return ""
-    
+
     def _handle_self_failure(self, init_exc):
         # TODO: this only partially works, needs some work
         tb = sys.exc_info()[2]
@@ -61,10 +61,11 @@ class ExcHandler:
         orig_frame = outerframes[0].frame
         self.frame_summaries = ExcHandler._remove_nonlib_frames(stack)
         self.last.locals = orig_frame.f_locals
-        
+
         if not self.exc:
             try:
-                orig_exc = next(val for name, val in self.last.locals.items() if isinstance(val, Exception))  # calculated guess
+                orig_exc = next(
+                    val for name, val in self.last.locals.items() if isinstance(val, Exception))  # calculated guess
             except StopIteration:
                 orig_exc = None
             self.exc = orig_exc
@@ -73,10 +74,10 @@ class ExcHandler:
                             f'ORIGINAL exception: {self.excType}: {self.exc}'
                             ])
         self.excArgs = args
-    
+
     @staticmethod
     def _extract_tb(tb, capture_locals: bool) -> FrameSummaries:
-        
+
         extracted_tb = traceback.extract_tb(tb)
         tb_frame_summaries: FrameSummaries = ExcHandler._remove_nonlib_frames(extracted_tb)
         if capture_locals:
@@ -87,11 +88,11 @@ class ExcHandler:
                     tb = tb.tb_next
                     tb_steps_taken += 1
                     continue
-                
+
                 if f_idx < tb_steps_taken:
                     print(colors.brightyellow(f'REALLY WIERD, f_idx ({f_idx}) < tb_steps_taken ({tb_steps_taken})'))
                     continue
-                
+
                 if f_idx > tb_steps_taken:
                     steps_to_take = f_idx - tb_steps_taken
                     for _ in range(steps_to_take):
@@ -100,11 +101,12 @@ class ExcHandler:
                 tb_frame_summaries[i][1].locals = tb.tb_frame.f_locals
                 tb = tb.tb_next
                 tb_steps_taken += 1
-        
+
         return tb_frame_summaries
-    
+
     @staticmethod
-    def _combine_traceback_and_stack(stack: traceback.StackSummary, tb_frame_summaries: FrameSummaries) -> FrameSummaries:
+    def _combine_traceback_and_stack(stack: traceback.StackSummary,
+                                     tb_frame_summaries: FrameSummaries) -> FrameSummaries:
         """The traceback has specific info regarding the exceptions.
         The stack has unspecific info regarding the exceptions, plus info about everything preceding the exceptions.
         This function combines the two."""
@@ -115,7 +117,7 @@ class ExcHandler:
         else:
             stack_frame_summaries.extend(tb_frame_summaries)
         return stack_frame_summaries
-    
+
     @staticmethod
     def _remove_nonlib_frames(stack: traceback.StackSummary) -> FrameSummaries:
         frame_summaries: FrameSummaries = []
@@ -125,7 +127,7 @@ class ExcHandler:
                 continue
             frame_summaries.append([i, frame])
         return frame_summaries
-    
+
     @staticmethod
     def _get_frames_overlap_index(stack_f_summaries: FrameSummaries, tb_f_summaries: FrameSummaries):
         # tb sort: most recent first. stack sort is the opposite → looking to match tb_f_summaries[0]
@@ -133,7 +135,7 @@ class ExcHandler:
             if fs[1].filename == tb_f_summaries[0][1].filename:
                 return i
         return None
-    
+
     @staticmethod
     def fmt_args(exc_args) -> str:
         excArgs = []
@@ -142,7 +144,7 @@ class ExcHandler:
                 arg = f'{arg[:500]}...'
             excArgs.append(arg)
         return ", ".join(excArgs)
-    
+
     def _format_locals(self, lokals: dict) -> str:
         formatted = ""
         for name, val in lokals.items():
@@ -151,10 +153,10 @@ class ExcHandler:
             if inspect.isfunction(val):
                 print(colors.brightblack(f'skipped function: {name}'))
                 continue
-            
+
             typ = self._formatter(type(val))
             val = self._formatter(val)
-            
+
             if val.startswith('typing'):
                 continue
             if '\n' in val:
@@ -163,9 +165,9 @@ class ExcHandler:
             else:
                 linebreak = '\n'
                 quote = ''
-            formatted += f'\t{name}: {quote}{val}{quote} {colors.dark(typ)}{linebreak}'
+            formatted += f'\t{colors.white(name)}: {quote}{val}{quote} {colors.dark(typ)}{linebreak}'
         return formatted
-    
+
     @property
     def last(self) -> traceback.FrameSummary:
         try:
@@ -174,13 +176,16 @@ class ExcHandler:
             print('FAILED getting ExcHandler.last()\n', ExcHandler(e).summary())
             fs = traceback.FrameSummary(__name__, -1, 'ExcHandler.last()')
             return fs
-    
+
     @property
-    def excType(self):
-        return self.exc.__class__.__qualname__
-    
-    def shorter(self, *extra):
-        """Returns 1 very short line: just pretty exception type and formatted exception args if exist"""
+    def excType(self) -> str:
+        return colors.brightwhite(self.exc.__class__.__qualname__)
+
+    def shorter(self, *extra) -> str:
+        """Returns 1 very short line: just pretty exception type and formatted exception args if exist (plus any `extra` lines).
+
+        :param extra: any extra data / information to be included at the end of resulting string
+        """
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
         if self.excArgs:
@@ -190,11 +195,12 @@ class ExcHandler:
         if extra:
             string += f' | ' + ', '.join(map(str, extra))
         return string
-    
-    def short(self, *extra):
+
+    def short(self, *extra) -> str:
         """
-        Returns 1 line: exc args and some context info.
-        :param extra: will be (formatted and) appended to resulting string 
+        Returns 1 line: exc args and some context info (plus any `extra` lines).
+
+        :param extra: any extra data / information to be included at the end of resulting string
         """
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
@@ -202,24 +208,33 @@ class ExcHandler:
         if extra:
             string += f' | ' + ', '.join(map(str, extra))
         return string
-    
-    def summary(self, *extra):
-        """Returns 5 lines"""
+
+    def summary(self, *extra) -> str:
+        """
+        Returns 5 lines (plus any `extra` lines)
+
+        :param extra: any extra data / information to be included at the end of resulting string
+        """
         if not self.exc:
             return ExcHandler._handle_bad_call_context()
-        string = '\n'.join([f'{self.excType}, File "{self.last.filename}", line {self.last.lineno} in {colors.brightwhite(self.last.name)}()',
-                            f'Exception args:',
-                            f'\t{self.excArgs}',
-                            f'Responsible code:',
-                            f'\t{self.last.line}',
-                            *map(str, extra)
-                            ])
-        
+        string = '\n'.join([
+            f'{self.excType}, File "{self.last.filename}", line {self.last.lineno} in {colors.brightwhite(self.last.name)}()',
+            colors.white(f'Exception args:'),
+            f'\t{self.excArgs}',
+            colors.white(f'Responsible code:'),
+            f'\t{self.last.line}',
+            *map(str, extra)
+        ])
+
         return string
-    
-    def full(self, *extra, limit: int = None):
-        """Prints the summary, whole stack and local variables at the scope of exception.
-        Limit is 0-based, from recent to deepest (limit=0 means only first frame)"""
+
+    def full(self, *extra, limit: int = None) -> str:
+        """
+         Prints the summary, whole stack and local variables at the scope of exception.
+
+        :param extra: any extra data / information to be included at the end of the summary
+        :param int limit: 0-based, from recent to deepest (limit=0 means only first frame)
+        """
         import os
         try:
             termwidth, _ = os.get_terminal_size()
@@ -238,5 +253,5 @@ class ExcHandler:
             # from recent to deepest
             description += f'\nFile "{fs.filename}", line {fs.lineno} in {colors.brightwhite(fs.name + "()")}\n\t{fs.line}'
             if fs.locals is not None:
-                description += f'\nLocals:\n{self._format_locals(fs.locals)}'
+                description += f'\n{colors.white("Locals")}:\n{self._format_locals(fs.locals)}'
         return f'\n{"-" * termwidth}\n\n{description}\n{"-" * termwidth}\n'
