@@ -2,6 +2,7 @@ import os
 
 IGIT_LOG_LEVEL = os.environ.get('IGIT_LOG_LEVEL', '')
 if IGIT_LOG_LEVEL.lower() == 'none':
+    print(f'{IGIT_LOG_LEVEL = }: Loggr is a noop')
     class Loggr:
         def __init__(self, *args, **kwargs):
             pass
